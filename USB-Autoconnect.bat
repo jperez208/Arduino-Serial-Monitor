@@ -100,11 +100,10 @@ if /i not "!KEEP!"=="Y" (
 
 :CONNECT
 echo.
-echo %GREEN%Connecting to !AUTOCOM! (!BAUD!, !DATABITS!, !PARITY!, !STOPBITS!)...%RESET%
-echo %YELLOW%Live Controls: [R] Reset Target   [S] Change Settings   [Q] Quit%RESET%
+echo %YELLOW%Live Controls: [Ctrl+R] Reset Target   [Ctrl+E] Change Settings   [Ctrl+X] Quit%RESET%
 echo ------------------------------------------------------------
 
-:: Built-in PowerShell Serial Monitor with non-blocking keypress detection
+:: Built-in PowerShell Serial Monitor with Ctrl+Key detection
 powershell -NoProfile -Command ^
   "$portName = '!AUTOCOM!'; " ^
   "$baud = [int]'!BAUD!'; " ^
@@ -112,7 +111,8 @@ powershell -NoProfile -Command ^
   "$parity = '!PARITY!'; " ^
   "$stopBits = '!STOPBITS!'; " ^
   "$exitCode = 0; " ^
-  "while ($true) { " ^
+  "$quit = $false; " ^
+  "while (-not $quit) { " ^
   "  try { " ^
   "    $port = New-Object System.IO.Ports.SerialPort $portName, $baud, $parity, $dataBits, $stopBits; " ^
   "    $port.DtrEnable = $true; " ^
@@ -121,15 +121,16 @@ powershell -NoProfile -Command ^
   "    Write-Host '[CONNECTED]' -ForegroundColor Green; " ^
   "    while ($port.IsOpen) { " ^
   "      if ([Console]::KeyAvailable) { " ^
-  "        $key = [Console]::ReadKey($true).Key; " ^
-  "        if ($key -eq 'R') { " ^
+  "        $k = [Console]::ReadKey($true); " ^
+  "        $ctrl = ($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0; " ^
+  "        if ($ctrl -and $k.Key -eq 'R') { " ^
   "          Write-Host '`n[RESETTING ARDUINO VIA DTR...]' -ForegroundColor Cyan; " ^
   "          $port.DtrEnable = $false; Start-Sleep -Milliseconds 100; $port.DtrEnable = $true; " ^
-  "        } elseif ($key -eq 'S') { " ^
+  "        } elseif ($ctrl -and $k.Key -eq 'E') { " ^
   "          Write-Host '`n[CLOSING PORT FOR SETTINGS...]' -ForegroundColor Yellow; " ^
-  "          $exitCode = 2; break; " ^
-  "        } elseif ($key -eq 'Q') { " ^
-  "          $exitCode = 0; break; " ^
+  "          $exitCode = 2; $quit = $true; break; " ^
+  "        } elseif ($ctrl -and $k.Key -eq 'X') { " ^
+  "          $exitCode = 0; $quit = $true; break; " ^
   "        } " ^
   "      } " ^
   "      try { " ^
@@ -139,21 +140,20 @@ powershell -NoProfile -Command ^
   "        else { Write-Host $line } " ^
   "      } catch [System.TimeoutException] { } " ^
   "    } " ^
-  "    if ($exitCode -ne 0 -or $key -eq 'Q') { break } " ^
   "  } catch { " ^
   "    if ([Console]::KeyAvailable) { " ^
-  "      $key = [Console]::ReadKey($true).Key; " ^
-  "      if ($key -eq 'S') { $exitCode = 2; break; } " ^
-  "      if ($key -eq 'Q') { $exitCode = 0; break; } " ^
+  "      $k = [Console]::ReadKey($true); " ^
+  "      $ctrl = ($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0; " ^
+  "      if ($ctrl -and $k.Key -eq 'E') { $exitCode = 2; $quit = $true; break; } " ^
+  "      if ($ctrl -and $k.Key -eq 'X') { $exitCode = 0; $quit = $true; break; } " ^
   "    } " ^
-  "    Write-Host '[DISCONNECTED - Waiting for device... (Press S for settings, Q to quit)]' -ForegroundColor Yellow; " ^
+  "    Write-Host '[DISCONNECTED - Waiting for device... (Ctrl+E for settings, Ctrl+X to quit)]' -ForegroundColor Yellow; " ^
   "    Start-Sleep -Seconds 1; " ^
   "  } finally { " ^
   "    if ($port -and $port.IsOpen) { $port.Close() } " ^
   "  } " ^
   "} " ^
   "exit $exitCode"
-
 if %errorlevel%==2 goto SETTINGS_MENU
 
 echo.
