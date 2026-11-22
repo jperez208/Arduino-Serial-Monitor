@@ -1,5 +1,7 @@
 Arduino Auto Serial Monitor
 
+Alternate to Serial Monitor in Arduino IDE.
+
 A lightweight Windows-based Arduino Serial Monitor built using Batch scripting and PowerShell.
 
 Designed for Arduino developers, electronics enthusiasts, and embedded systems hobbyists who want a convenient way to connect to and monitor serial devices without manually searching for COM ports.
