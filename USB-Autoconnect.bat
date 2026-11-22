@@ -94,8 +94,22 @@ if /i not "!KEEP!"=="Y" (
   echo %BLUE%--- Custom Serial Settings ^(Press Enter to keep current value^) ---%RESET%
   set /p "BAUD=Baud Rate [!BAUD!]: "
   set /p "DATABITS=Data Bits (5-8) [!DATABITS!]: "
-  set /p "PARITY=Parity (None, Odd, Even, Mark, Space) [!PARITY!]: "
-  set /p "STOPBITS=Stop Bits (One, Two, OnePointFive) [!STOPBITS!]: "
+  set /p "PARITY=Parity (N/None, O/Odd, E/Even, M/Mark, S/Space) [!PARITY!]: "
+  set /p "STOPBITS=Stop Bits (0, 1, 1.5, 2) [!STOPBITS!]: "
+
+  :: Normalize Parity shorthands (case-insensitive)
+  if /i "!PARITY!"=="N" set "PARITY=None"
+  if /i "!PARITY!"=="0" set "PARITY=None"
+  if /i "!PARITY!"=="O" set "PARITY=Odd"
+  if /i "!PARITY!"=="E" set "PARITY=Even"
+  if /i "!PARITY!"=="M" set "PARITY=Mark"
+  if /i "!PARITY!"=="S" set "PARITY=Space"
+
+  :: Normalize Stop Bits numbers to .NET Enum names
+  if "!STOPBITS!"=="0" set "STOPBITS=None"
+  if "!STOPBITS!"=="1" set "STOPBITS=One"
+  if "!STOPBITS!"=="1.5" set "STOPBITS=OnePointFive"
+  if "!STOPBITS!"=="2" set "STOPBITS=Two"
 )
 
 :CONNECT
@@ -124,7 +138,7 @@ powershell -NoProfile -Command ^
   "        $k = [Console]::ReadKey($true); " ^
   "        $ctrl = ($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0; " ^
   "        if ($ctrl -and $k.Key -eq 'R') { " ^
-  "          Write-Host '`n[RESETTING ARDUINO VIA DTR...]' -ForegroundColor Cyan; " ^
+  "          Write-Host '`n[RESETTING TARGET VIA DTR...]' -ForegroundColor Cyan; " ^
   "          $port.DtrEnable = $false; Start-Sleep -Milliseconds 100; $port.DtrEnable = $true; " ^
   "        } elseif ($ctrl -and $k.Key -eq 'E') { " ^
   "          Write-Host '`n[CLOSING PORT FOR SETTINGS...]' -ForegroundColor Yellow; " ^
@@ -135,8 +149,8 @@ powershell -NoProfile -Command ^
   "      } " ^
   "      try { " ^
   "        $line = $port.ReadLine(); " ^
-  "        if ($line -match 'SUCCESS|0x0BC11477') { Write-Host $line -ForegroundColor Green } " ^
-  "        elseif ($line -match 'Failed|FAULT|ACK: 0|ACK: 7') { Write-Host $line -ForegroundColor Red } " ^
+  "        if ($line -match 'SUCCESS|OK|READY|DONE|0x[0-9A-Fa-f]+') { Write-Host $line -ForegroundColor Green } " ^
+  "        elseif ($line -match 'ERROR|FAIL|FAULT|WARN|TIMEOUT') { Write-Host $line -ForegroundColor Red } " ^
   "        else { Write-Host $line } " ^
   "      } catch [System.TimeoutException] { } " ^
   "    } " ^
@@ -159,3 +173,4 @@ if %errorlevel%==2 goto SETTINGS_MENU
 echo.
 echo %BLUE%Serial monitor closed. Goodbye.%RESET%
 exit /b 0
+
