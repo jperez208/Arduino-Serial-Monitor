@@ -1,5 +1,4 @@
 @echo off
-:: Scan COM ports, auto-select Arduino, configure serial settings, and stream with live controls
 setlocal EnableExtensions EnableDelayedExpansion
 title Arduino Serial Monitor
 
@@ -184,7 +183,7 @@ echo.
 echo %YELLOW%Live Controls: [Ctrl+R] Reset Target   [Ctrl+E] Change Settings   [Ctrl+X] Quit%RESET%
 echo ------------------------------------------------------------
 
-:: Built-in PowerShell Serial Monitor with Ctrl+Key detection
+
 powershell.exe -NoProfile -Command ^
  "$portName = '!AUTOCOM!'; " ^
  "$baud = [int]'!BAUD!'; " ^
@@ -192,57 +191,66 @@ powershell.exe -NoProfile -Command ^
  "$parity = [System.IO.Ports.Parity]'!PARITY!'; " ^
  "$stopBits = [System.IO.Ports.StopBits]'!STOPBITS!'; " ^
  "$quit = $false; $exitCode = 0; " ^
+ "function Get-Action { " ^
+ "  try { " ^
+ "    if ([Console]::KeyAvailable) { " ^
+ "      $k = [Console]::ReadKey($true); " ^
+ "      if (($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0) { return [string]$k.Key } " ^
+ "    } " ^
+ "  } catch {} " ^
+ "  return ''; " ^
+ "} " ^
+ "function Show-Line([string]$s) { " ^
+ "  if ($s -match 'SUCCESS|OK|READY|DONE|0x[0-9A-Fa-f]+') { Write-Host $s -ForegroundColor Green } " ^
+ "  elseif ($s -match 'ERROR|FAIL|FAULT|WARN|TIMEOUT') { Write-Host $s -ForegroundColor Red } " ^
+ "  else { Write-Host $s } " ^
+ "} " ^
  "while (-not $quit) { " ^
- "  $port = $null; " ^
+ "  $port = $null; $connected = $false; " ^
  "  try { " ^
  "    $port = [System.IO.Ports.SerialPort]::new($portName,$baud,$parity,$dataBits,$stopBits); " ^
  "    $port.DtrEnable = $true; $port.ReadTimeout = 100; " ^
- "    $port.Open(); " ^
+ "    $port.Open(); $connected = $true; " ^
  "    Write-Host '[CONNECTED]' -ForegroundColor Green; " ^
  "    $buffer = ''; $timer = [Diagnostics.Stopwatch]::StartNew(); " ^
  "    while ($port.IsOpen -and -not $quit) { " ^
- "      if ([Console]::KeyAvailable) { " ^
- "        $k = [Console]::ReadKey($true); " ^
- "        if (($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0) { " ^
- "          if ($k.Key -eq 'R') { Write-Host '[RESETTING TARGET VIA DTR]' -ForegroundColor Cyan; $port.DtrEnable=$false; Start-Sleep -Milliseconds 100; $port.DtrEnable=$true; } " ^
- "          elseif ($k.Key -eq 'E') { $exitCode=2; $quit=$true; break; } " ^
- "          elseif ($k.Key -eq 'X') { $quit=$true; break; } " ^
- "        } " ^
- "      } " ^
+ "      $action = Get-Action; " ^
+ "      if ($action -eq 'R') { " ^
+ "        Write-Host '[RESETTING TARGET VIA DTR]' -ForegroundColor Cyan; " ^
+ "        $port.DtrEnable = $false; Start-Sleep -Milliseconds 100; $port.DtrEnable = $true; " ^
+ "      } elseif ($action -eq 'E') { $exitCode = 2; $quit = $true; break; " ^
+ "      } elseif ($action -eq 'X') { $exitCode = 0; $quit = $true; break; } " ^
  "      $chunk = $port.ReadExisting(); " ^
  "      if ($chunk.Length -gt 0) { $buffer += $chunk; } " ^
- "      while (($newline=$buffer.IndexOf([char]10)) -ge 0) { " ^
- "        $line=$buffer.Substring(0,$newline).TrimEnd([char]13); " ^
- "        $buffer=$buffer.Substring($newline+1); " ^
- "        if ($line -match 'SUCCESS|OK|READY|DONE|0x[0-9A-Fa-f]+') { Write-Host $line -ForegroundColor Green } " ^
- "        elseif ($line -match 'ERROR|FAIL|FAULT|WARN|TIMEOUT') { Write-Host $line -ForegroundColor Red } " ^
- "        else { Write-Host $line } " ^
- "        $timer.Restart(); " ^
+ "      while (($newline = $buffer.IndexOf([char]10)) -ge 0) { " ^
+ "        $line = $buffer.Substring(0,$newline).TrimEnd([char]13); " ^
+ "        $buffer = $buffer.Substring($newline+1); " ^
+ "        Show-Line $line; $timer.Restart(); " ^
  "      } " ^
- "      if ($buffer.Length -ge 256 -or ($buffer.Length -gt 0 -and $timer.ElapsedMilliseconds -ge 100)) { Write-Host -NoNewline $buffer; $buffer=''; $timer.Restart(); } " ^
+ "      if ($buffer.Length -ge 256 -or ($buffer.Length -gt 0 -and $timer.ElapsedMilliseconds -ge 100)) { " ^
+ "        Write-Host -NoNewline $buffer; $buffer = ''; $timer.Restart(); " ^
+ "      } " ^
  "      Start-Sleep -Milliseconds 10; " ^
  "    } " ^
- "    if ($buffer.Length -gt 0) { Write-Host -NoNewline $buffer; } " ^
  "  } catch { " ^
- "    Write-Host ('[DISCONNECTED / SERIAL ERROR] '+$_.Exception.Message) -ForegroundColor Yellow; " ^
- "    if (-not $quit -and $exitCode -ne 2) { " ^
- "      for ($i=0; $i -lt 10 -and -not $quit; $i++) { " ^
- "        if ([Console]::KeyAvailable) { " ^
- "          $k=[Console]::ReadKey($true); " ^
- "          if (($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0) { " ^
- "            if ($k.Key -eq 'E') { $exitCode=2; $quit=$true; } " ^
- "            if ($k.Key -eq 'X') { $quit=$true; } " ^
- "          } " ^
- "        } " ^
- "        Start-Sleep -Milliseconds 100; " ^
- "      } " ^
- "    } " ^
+ "    if (-not $quit) { Write-Host ('[DISCONNECTED] ' + $_.Exception.Message) -ForegroundColor Yellow; } " ^
  "  } finally { " ^
- "    if ($null -ne $port) { if ($port.IsOpen) { $port.Close(); }; $port.Dispose(); } " ^
+ "    if ($null -ne $port) { " ^
+ "      try { if ($port.IsOpen) { $port.Close(); } } catch {} " ^
+ "      try { $port.Dispose(); } catch {} " ^
+ "    } " ^
  "  } " ^
- "  if (-not $quit -and $exitCode -ne 2) { " ^
- "    Write-Host '[RECONNECTING...]' -ForegroundColor Yellow; " ^
- "    Start-Sleep -Seconds 1; " ^
+ "  if ($buffer.Length -gt 0) { Write-Host -NoNewline $buffer; $buffer = ''; } " ^
+ "  if ($quit) { break; } " ^
+ "  if ($exitCode -eq 2) { $quit = $true; break; } " ^
+ "  Write-Host '[WAITING FOR DEVICE] ' -ForegroundColor Yellow -NoNewline; Write-Host '[Ctrl+E SETTINGS | Ctrl+X QUIT]' -ForegroundColor Red; " ^
+ "  $wait = [Diagnostics.Stopwatch]::StartNew(); " ^
+ "  while ($wait.ElapsedMilliseconds -lt 1000 -and -not $quit) { " ^
+ "    $action = Get-Action; " ^
+ "    if ($action -eq 'E') { $exitCode = 2; $quit = $true; break; } " ^
+ "    if ($action -eq 'X') { $exitCode = 0; $quit = $true; break; } " ^
+ "    if ($action -eq 'R') { Write-Host '[DEVICE NOT CONNECTED - RESET UNAVAILABLE]' -ForegroundColor Yellow; } " ^
+ "    Start-Sleep -Milliseconds 50; " ^
  "  } " ^
  "} " ^
  "exit $exitCode"
