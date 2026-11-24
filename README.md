@@ -59,23 +59,5 @@ Suggestions, bug reports, and improvements are welcome!
 
 ## Preview
 
-```diff
-Scanning for Arduino / USB-to-TTL Devices...
-
-+ [1] [Likely Arduino] COM3 -> USB-SERIAL CH340 (COM3)
-! [-] [Other Device]   COM1 -> Communications Port (COM1)
-
-Auto-selected: COM3 (USB-SERIAL CH340 (COM3))
-
-Current Settings: COM3 | 9600 baud, 8 data bits, None parity, One stop bit
-Keep current settings? [Y/n] (or P to re-scan ports): Y
-
-Connecting to COM3 (9600, 8, None, One)...
-Live Controls: [Ctrl+R] Reset Target   [Ctrl+E] Change Settings   [Ctrl+X] Quit
-------------------------------------------------------------
-[CONNECTED]
-Booting firmware v1.2...
-+ Target ID: 0x0BC11477 - SUCCESS
-Sensor initialized. Waiting for trigger...
-```
+<img width="1102" height="780" alt="3170281795400036495" src="https://github.com/user-attachments/assets/f791cea0-5b87-49c2-b723-bd33797fd5ce" />
 
