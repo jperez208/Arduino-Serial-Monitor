@@ -51,7 +51,7 @@ Designed for Arduino developers, electronics enthusiasts, and embedded systems h
 
 ## Compatibility
 
-Designed for Windows systems with PowerShell and `.NET` serial-port support.
+Designed for Windows systems with PowerShell.
 
 ---
 
