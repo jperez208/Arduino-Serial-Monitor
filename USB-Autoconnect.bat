@@ -204,7 +204,6 @@ $script:showTs = $true
 $script:txBuffer = ''
 $script:dirBuffer = ''
 $script:editingDir = $false
-$script:savePrompt = $false
 $script:pausePage = 'menu'
 $script:pauseStatus = ''
 $script:quit = $false
@@ -360,10 +359,6 @@ function Draw-Prompt {
             if ($script:editingDir) {
     		$line2 = "Save file: $($script:dirBuffer)"
    		 $line3 = 'Backspace=Edit | Enter=Confirm | Esc=Cancel'
-		}
-		elseif ($script:savePrompt) {
- 		   $line2 = "Save file: $($script:dirBuffer)"
- 		   $line3 = 'Options: Y=Save | N=Cancel'
 		}
             elseif ($script:pausePage -eq 'more') {
                 $line2 = 'Options: R=Rescan | B=Back'
@@ -814,42 +809,23 @@ function Handle-Input($port) {
                 }
                 elseif ($keyCode -eq 13) {
 
-                    $path = $script:dirBuffer.Trim().Trim('"')
+					$path = $script:dirBuffer.Trim().Trim('"')
 
-                    if ($path.Length -gt 0) {
-                        $script:pendingSavePath = $path
-                        $script:savePrompt = $true
-                        $script:editingDir = $false
-                    }
-                }
+				if ($path.Length -gt 0) {
+
+					$script:logDir = Split-Path -Parent $path
+					$script:logFileName = Split-Path -Leaf $path
+
+					$script:editingDir = $false
+
+					Save-Log
+					}
+				}
                 elseif (
                     $charCode -gt 0 -and
                     -not [char]::IsControl([char]$charCode)
                 ) {
                     $script:dirBuffer += [char]$charCode
-                }
-
-                Draw-Prompt
-                return ''
-            }
-
-            # SAVE CONFIRMATION
-
-            if ($script:savePrompt) {
-
-                if ($charCode -eq 89) {
-
-                    $script:savePrompt = $false
-
-                    $script:logDir = Split-Path -Parent $script:pendingSavePath
-                    $script:logFileName = Split-Path -Leaf $script:pendingSavePath
-
-                    Save-Log
-                }
-                elseif ($charCode -eq 78 -or $keyCode -eq 27) {
-
-                    $script:savePrompt = $false
-                    $script:pauseStatus = '[SAVE CANCELLED]'
                 }
 
                 Draw-Prompt
