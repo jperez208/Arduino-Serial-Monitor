@@ -102,3 +102,6 @@ USM was developed as a lightweight alternative to repeatedly opening a full deve
 The goal is simple: make serial communication easier to access, configure, and use across different embedded hardware platforms.
 
 **Built for electronics enthusiasts, embedded developers, and anyone who works with serial hardware.**
+<img width="1123" height="551" alt="Screenshot 2026-11-27 113851" src="https://github.com/user-attachments/assets/91eb03ec-8cae-4007-8f1f-20db868fb74b" />
+<img width="1157" height="651" alt="Screenshot 2026-11-27 114001" src="https://github.com/user-attachments/assets/b443b510-a8fa-4db4-8ac0-76e7ceebcbd2" />
+<img width="822" height="633" alt="Screenshot 2026-11-27 114031" src="https://github.com/user-attachments/assets/3b4ff506-d0cb-41dc-895a-b03af59d3abc" />
