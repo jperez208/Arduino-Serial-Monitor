@@ -119,7 +119,7 @@ if defined INPUT set "DATABITS=!INPUT!"
 if not "!DATABITS!"=="5" if not "!DATABITS!"=="6" if not "!DATABITS!"=="7" if not "!DATABITS!"=="8" goto SETTINGS_MENU
 
 set "INPUT="
-set /p "INPUT=Parity (N/O/E/M/S) [!PARITY!]: "
+set /p "INPUT=Parity ([N]one/[O]dd/[E]ven/[M]ark/[S]pace) [!PARITY!]: "
 if defined INPUT set "PARITY=!INPUT!"
 
 if /i "!PARITY!"=="N" set "PARITY=None"
