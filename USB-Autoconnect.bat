@@ -211,8 +211,13 @@ $script:quit = $false
 $script:exitCode = 0
 
 $script:sessionLog = [System.Collections.Generic.List[string]]::new()
+$script:visibleLog = [System.Collections.Generic.List[object]]::new()
 $script:esc = [char]27
 $script:logRow = 0
+
+$script:historyOffset = 0
+$script:historyView = $false
+$script:historyDirty = $true
 
 # --------------------------------------------------
 # SAFE CURSOR
@@ -238,6 +243,99 @@ function Safe-Cursor([int]$x, [int]$y) {
     }
 }
 
+#TOP HEADER
+function Draw-Header {
+    try {
+        $w = [Console]::WindowWidth
+        $e = $script:esc
+
+        $lines = @(
+            '             ARDUINO SERIAL MONITOR',
+            " Port: $portName | Baud: $baud | Data: $dataBits | Parity: $parity | Stop: $stopBits",
+            '------------------------------------------------------------'
+        )
+
+        for ($i = 0; $i -lt 3; $i++) {
+            if (Safe-Cursor 0 ([Console]::WindowTop + $i)) {
+                $line = $lines[$i]
+
+                if ($line.Length -ge $w) {
+                    $line = $line.Substring(0, $w - 1)
+                }
+
+                [Console]::Write(
+                    "$e[2K$e[96m$line$e[0m"
+                )
+            }
+        }
+    }
+    catch {}
+}
+
+
+# --------------------------------------------------
+# DRAW PAUSED SERIAL HISTORY
+# --------------------------------------------------
+
+function Draw-History {
+    try {
+        $top = [Console]::WindowTop
+        $height = [Console]::WindowHeight
+        $width = [Console]::WindowWidth
+
+        $firstRow = $top + 3
+        $lastRow = $top + $height - 4
+        $visibleRows = $lastRow - $firstRow + 1
+
+        if ($visibleRows -lt 1) { return }
+
+        $total = $script:sessionLog.Count
+
+        $maxOffset = [Math]::Max(
+            0,
+            $total - $visibleRows
+        )
+
+        $script:historyOffset = [Math]::Max(
+            0,
+            [Math]::Min(
+                $script:historyOffset,
+                $maxOffset
+            )
+        )
+
+        $startIndex = $total - $visibleRows - $script:historyOffset
+
+        for ($i = 0; $i -lt $visibleRows; $i++) {
+
+            $index = $startIndex + $i
+            $y = $firstRow + $i
+
+            if (Safe-Cursor 0 $y) {
+
+                [Console]::Write("$($script:esc)[2K")
+
+                if ($index -ge 0 -and $index -lt $total) {
+
+                    $line = [string]$script:sessionLog[$index]
+
+                    if ($line.Length -ge $width) {
+                        $line = $line.Substring(0, $width - 1)
+                    }
+
+                    [Console]::Write($line)
+                }
+            }
+        }
+
+        $script:historyDirty = $false
+
+        Draw-Prompt
+    }
+    catch {}
+}
+
+
 # --------------------------------------------------
 # DRAW INTERFACE
 # --------------------------------------------------
@@ -245,8 +343,11 @@ function Safe-Cursor([int]$x, [int]$y) {
 function Draw-Prompt {
     try {
         $w = [Console]::WindowWidth
-        $bottom = [Console]::WindowTop + [Console]::WindowHeight - 1
-        $e = $script:esc
+		$h = [Console]::WindowHeight
+		$top = [Console]::WindowTop
+
+		$bottom = $top + $h - 1
+		$e = $script:esc
 
         $line1 = ''
         $line2 = ''
@@ -309,15 +410,18 @@ function Draw-Prompt {
     catch {}
 }
 
+
 # --------------------------------------------------
 # SERIAL LOG OUTPUT
 # --------------------------------------------------
+
 
 function Print-Log(
     [string]$message,
     [string]$color = '37'
 ) {
     try {
+
         $stamp = ''
 
         if ($script:showTs) {
@@ -326,6 +430,7 @@ function Print-Log(
 
         $fullMessage = $stamp + $message
 
+        # Preserve complete session history.
         $script:sessionLog.Add($fullMessage)
 
         if ($script:paused) {
@@ -333,51 +438,74 @@ function Print-Log(
             return
         }
 
-        $windowTop = [Console]::WindowTop
-        $windowHeight = [Console]::WindowHeight
+        $top = [Console]::WindowTop
+        $height = [Console]::WindowHeight
+        $width = [Console]::WindowWidth
 
-        # Reserve the bottom three rows for the interface.
-        $maxLogRows = $windowHeight - 3
+        # Fixed display boundaries.
+        $firstLogRow = $top + 3
+        $lastLogRow = $top + $height - 4
+
+        $maxLogRows = $lastLogRow - $firstLogRow + 1
 
         if ($maxLogRows -lt 1) {
             return
         }
 
-        # Reset the visible log area when full.
-        if ($script:logRow -ge $maxLogRows) {
+        # Store incoming message.
+        $script:visibleLog.Add(
+            [PSCustomObject]@{
+                Text = $fullMessage
+                Color = $color
+            }
+        )
 
-            for ($i = 0; $i -lt $maxLogRows; $i++) {
-                if (Safe-Cursor 0 ($windowTop + $i)) {
-                    [Console]::Write(
-                        "$($script:esc)[2K"
-                    )
-                }
+        # Remove oldest messages when full.
+        while ($script:visibleLog.Count -gt $maxLogRows) {
+            $script:visibleLog.RemoveAt(0)
+        }
+
+        # Redraw ONLY the middle section.
+        for ($i = 0; $i -lt $maxLogRows; $i++) {
+
+            $y = $firstLogRow + $i
+
+            if (-not (Safe-Cursor 0 $y)) {
+                continue
             }
 
-            $script:logRow = 0
+            if ($i -lt $script:visibleLog.Count) {
+
+                $entry = $script:visibleLog[$i]
+
+                $line = [string]$entry.Text
+                $entryColor = [string]$entry.Color
+
+                if ($line.Length -ge $width) {
+                    $line = $line.Substring(0, $width - 1)
+                }
+
+                [Console]::Write(
+                    "$($script:esc)[2K$($script:esc)[$($entryColor)m$line$($script:esc)[0m"
+                )
+            }
+            else {
+
+                [Console]::Write(
+                    "$($script:esc)[2K"
+                )
+            }
         }
 
-        $line = $fullMessage
-        $maxWidth = [Math]::Max(1, [Console]::WindowWidth - 1)
+        $script:logRow = $script:visibleLog.Count
 
-        if ($line.Length -gt $maxWidth) {
-            $line = $line.Substring(0, $maxWidth)
-        }
-
-        $y = $windowTop + $script:logRow
-
-        if (Safe-Cursor 0 $y) {
-
-            [Console]::Write(
-                "$($script:esc)[$($color)m$line$($script:esc)[0m$($script:esc)[K"
-            )
-        }
-
-        $script:logRow++
-
+        # Restore fixed bottom menu.
         Draw-Prompt
+
     }
-    catch {}
+    catch {
+        # Prevent display errors from interrupting serial monitoring.
+    }
 }
 
 # --------------------------------------------------
@@ -412,139 +540,357 @@ function Save-Log {
 }
 
 # --------------------------------------------------
+# WINDOWS CONSOLE MOUSE INPUT
+# --------------------------------------------------
+
+if (-not ('ConsoleMouseInput' -as [type])) {
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class ConsoleMouseInput
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT_RECORD
+    {
+        public ushort EventType;
+		public ushort Padding;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+        public byte[] EventData;
+    }
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern IntPtr GetStdHandle(int id);
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool GetConsoleMode(
+        IntPtr handle,
+        out uint mode
+    );
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool SetConsoleMode(
+        IntPtr handle,
+        uint mode
+    );
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool GetNumberOfConsoleInputEvents(
+        IntPtr handle,
+        out uint count
+    );
+
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool ReadConsoleInput(
+        IntPtr handle,
+        out INPUT_RECORD record,
+        uint length,
+        out uint read
+    );
+}
+'@
+
+}
+
+$script:consoleHandle = [ConsoleMouseInput]::GetStdHandle(-10)
+
+$mode = [uint32]0
+
+[ConsoleMouseInput]::GetConsoleMode(
+    $script:consoleHandle,
+    [ref]$mode
+) | Out-Null
+
+# --------------------------------------------------
 # KEYBOARD INPUT
 # --------------------------------------------------
 
+function Refresh-ConsoleLayout {
+
+    $script:lastWidth = [Console]::WindowWidth
+    $script:lastHeight = [Console]::WindowHeight
+    $script:lastTop = [Console]::WindowTop
+
+    Draw-Header
+
+    if ($script:paused) {
+        Draw-History
+    }
+    else {
+        Draw-Prompt
+    }
+}
 function Handle-Input($port) {
 
     try {
 
-        if (-not [Console]::KeyAvailable) {
+        $eventCount = [uint32]0
+
+        if (-not [ConsoleMouseInput]::GetNumberOfConsoleInputEvents(
+            $script:consoleHandle,
+            [ref]$eventCount
+        )) {
             return ''
         }
 
-        $k = [Console]::ReadKey($true)
+        if ($eventCount -eq 0) {
+            return ''
+        }
 
-        $ctrl = (
-            ($k.Modifiers -band [ConsoleModifiers]::Control) -ne 0
+        $record = New-Object ConsoleMouseInput+INPUT_RECORD
+        $record.EventData = New-Object byte[] 16
+
+        $read = [uint32]0
+
+        if (-not [ConsoleMouseInput]::ReadConsoleInput(
+            $script:consoleHandle,
+            [ref]$record,
+            1,
+            [ref]$read
+        )) {
+            return ''
+        }
+
+        if ($read -eq 0) {
+            return ''
+        }
+
+		# ==========================================
+		# MOUSE EVENTS
+		# ==========================================
+
+		if ($record.EventType -eq 2) {
+
+			# Ignore mouse input unless paused
+			if (-not $script:paused) {
+				return ''
+			}
+
+			# Read mouse event information
+			$buttonState = [BitConverter]::ToUInt32(
+				$record.EventData, 4
+			)
+
+			$eventFlags = [BitConverter]::ToUInt32(
+				$record.EventData, 12
+			)
+
+			# MOUSE_WHEELED = 0x0004
+			if (($eventFlags -band 0x0004) -ne 0) {
+
+				# Extract signed wheel delta
+				$wheelRaw = ($buttonState -shr 16) -band 0xFFFF
+
+		if ($wheelRaw -ge 32768) {
+			$wheel = $wheelRaw - 65536
+		}
+		else {
+			$wheel = $wheelRaw
+		}
+				if ($wheel -gt 0) {
+					$script:historyOffset += 3
+				}
+				elseif ($wheel -lt 0) {
+					$script:historyOffset -= 3
+				}
+
+			#	# Redraw history only
+				Draw-History
+			}
+
+			return ''
+		}
+
+        # ==========================================
+        # KEYBOARD EVENTS
+        # ==========================================
+
+        if ($record.EventType -ne 1) {
+            return ''
+        }
+
+        $keyDown = [BitConverter]::ToUInt32(
+            $record.EventData, 0
         )
 
+        if ($keyDown -eq 0) {
+            return ''
+        }
+
+        $keyCode = [BitConverter]::ToUInt16(
+            $record.EventData, 6
+        )
+
+        $charCode = [BitConverter]::ToUInt16(
+            $record.EventData, 10
+        )
+
+        $controlState = [BitConverter]::ToUInt32(
+            $record.EventData, 12
+        )
+
+        $LEFT_CTRL_PRESSED  = 0x0008
+		$RIGHT_CTRL_PRESSED = 0x0004
+
+		$ctrl = (
+			($controlState -band $LEFT_CTRL_PRESSED) -ne 0 -or
+			($controlState -band $RIGHT_CTRL_PRESSED) -ne 0
+		)
+		# ==========================================
+		# RUNNING MODE - CTRL+P PAUSE
+		# ==========================================
+
+		if (
+			-not $script:paused -and
+			$keyDown -eq 1 -and
+			$ctrl -and
+			$keyCode -eq 80
+		) {
+			return 'P'
+		}
         # ==========================================
         # PAUSED MODE
         # ==========================================
 
         if ($script:paused) {
 
-            # --------------------------------------
-            # DIRECTORY EDITING
-            # --------------------------------------
+            # HISTORY NAVIGATION
 
-# --------------------------------------
-# EDIT COMPLETE SAVE PATH
-# --------------------------------------
+            switch ($keyCode) {
 
-if ($script:editingDir) {
-
-    if ($k.Key -eq 'Escape') {
-        $script:editingDir = $false
-        $script:pauseStatus = '[SAVE CANCELLED]'
-    }
-    elseif ($k.Key -eq 'Backspace') {
-        if ($script:dirBuffer.Length -gt 0) {
-            $script:dirBuffer = $script:dirBuffer.Substring(
-                0, $script:dirBuffer.Length - 1
-            )
-        }
-    }
-    elseif ($k.Key -eq 'Enter') {
-        $path = $script:dirBuffer.Trim().Trim('"')
-
-        if ($path.Length -gt 0) {
-            $script:pendingSavePath = $path
-            $script:savePrompt = $true
-            $script:editingDir = $false
-        }
-    }
-    elseif (
-        $k.KeyChar -ne [char]0 -and
-        -not [char]::IsControl($k.KeyChar)
-    ) {
-        $script:dirBuffer += $k.KeyChar
-    }
-
-    Draw-Prompt
-    return ''
-}
-
-# --------------------------------------
-# SAVE CONFIRMATION
-# --------------------------------------
-
-if ($script:savePrompt) {
-
-    if ($k.Key -eq 'Y') {
-
-        $script:savePrompt = $false
-
-        $script:logDir = Split-Path -Parent $script:pendingSavePath
-        $script:logFileName = Split-Path -Leaf $script:pendingSavePath
-
-        Save-Log
-    }
-    elseif ($k.Key -eq 'N' -or $k.Key -eq 'Escape') {
-
-        $script:savePrompt = $false
-        $script:pauseStatus = '[SAVE CANCELLED]'
-    }
-
-    Draw-Prompt
-    return ''
-}
-
-            # --------------------------------------
-            # CTRL SHORTCUTS
-            # --------------------------------------
-
-            if ($ctrl) {
-
-                switch ($k.Key) {
-
-                    'R' { return 'R' }
-                    'T' { return 'T' }
-                    'E' { return 'E' }
-                    'X' { return 'X' }
+                38 {
+                    $script:historyOffset++
+                    Draw-History
+                    return ''
                 }
 
-                return ''
+                40 {
+                    $script:historyOffset--
+                    Draw-History
+                    return ''
+                }
+
+                33 {
+                    $script:historyOffset += [Console]::WindowHeight - 6
+                    Draw-History
+                    return ''
+                }
+
+                34 {
+                    $script:historyOffset -= [Console]::WindowHeight - 6
+                    Draw-History
+                    return ''
+                }
+
+                36 {
+                    $script:historyOffset = [int]::MaxValue
+                    Draw-History
+                    return ''
+                }
+
+                35 {
+                    $script:historyOffset = 0
+                    Draw-History
+                    return ''
+                }
             }
 
-            # --------------------------------------
-            # MORE MENU
-            # --------------------------------------
+            # SAVE PATH EDITING
 
-            if ($script:pausePage -eq 'more') {
+            if ($script:editingDir) {
 
-                switch ($k.Key) {
-
-                    'R' {
-                        $script:exitCode = 3
-                        $script:quit = $true
+                if ($keyCode -eq 27) {
+                    $script:editingDir = $false
+                    $script:pauseStatus = '[SAVE CANCELLED]'
+                }
+                elseif ($keyCode -eq 8) {
+                    if ($script:dirBuffer.Length -gt 0) {
+                        $script:dirBuffer = $script:dirBuffer.Substring(
+                            0, $script:dirBuffer.Length - 1
+                        )
                     }
+                }
+                elseif ($keyCode -eq 13) {
 
-                    'B' {
-                        $script:pausePage = 'menu'
+                    $path = $script:dirBuffer.Trim().Trim('"')
+
+                    if ($path.Length -gt 0) {
+                        $script:pendingSavePath = $path
+                        $script:savePrompt = $true
+                        $script:editingDir = $false
                     }
+                }
+                elseif (
+                    $charCode -gt 0 -and
+                    -not [char]::IsControl([char]$charCode)
+                ) {
+                    $script:dirBuffer += [char]$charCode
                 }
 
                 Draw-Prompt
                 return ''
             }
 
-            # --------------------------------------
-            # MAIN PAUSED MENU
-            # --------------------------------------
+            # SAVE CONFIRMATION
 
-            switch ($k.Key) {
+            if ($script:savePrompt) {
+
+                if ($charCode -eq 89) {
+
+                    $script:savePrompt = $false
+
+                    $script:logDir = Split-Path -Parent $script:pendingSavePath
+                    $script:logFileName = Split-Path -Leaf $script:pendingSavePath
+
+                    Save-Log
+                }
+                elseif ($charCode -eq 78 -or $keyCode -eq 27) {
+
+                    $script:savePrompt = $false
+                    $script:pauseStatus = '[SAVE CANCELLED]'
+                }
+
+                Draw-Prompt
+                return ''
+            }
+
+            # CTRL SHORTCUTS
+
+            if ($ctrl) {
+
+                switch ($keyCode) {
+                    82 { return 'R' }
+                    84 { return 'T' }
+                    69 { return 'E' }
+                    88 { return 'X' }
+                }
+
+                return ''
+            }
+
+            $key = [char]$charCode
+
+            # MORE MENU
+
+            if ($script:pausePage -eq 'more') {
+
+                if ($key -eq 'R') {
+                    $script:exitCode = 3
+                    $script:quit = $true
+                }
+                elseif ($key -eq 'B') {
+                    $script:pausePage = 'menu'
+                }
+
+                Draw-Prompt
+                return ''
+            }
+
+            # MAIN PAUSED MENU
+
+            switch ($key) {
 
                 'P' {
                     return 'P'
@@ -556,81 +902,79 @@ if ($script:savePrompt) {
                 }
 
                 'S' {
-    $script:editingDir = $true
-    $script:savePrompt = $false
-
-    $script:dirBuffer = Join-Path $script:logDir $script:logFileName
-
-    $script:pauseStatus = ''
-}
+                    $script:editingDir = $true
+                    $script:dirBuffer = Join-Path $script:logDir $script:logFileName
+                    $script:pauseStatus = ''
+                }
             }
 
             Draw-Prompt
             return ''
         }
 
-        # ==========================================
-        # RUNNING MODE
-        # ==========================================
+# ==========================================
+# RUNNING MODE - CTRL+P PAUSE
+# ==========================================
 
-        # Ctrl+P pauses
-        if ($ctrl -and $k.Key -eq 'P') {
+	if ($ctrl -and $k.Key -eq 'P') {
             return 'P'
         }
 
-        # Enter transmits
-        if ($k.Key -eq 'Enter') {
+        # ENTER TRANSMITS
+
+        if ($keyCode -eq 13) {
 
             $message = $script:txBuffer
             $script:txBuffer = ''
 
             if ($null -ne $port -and $port.IsOpen) {
-
                 $port.Write($message + "`n")
-
                 Print-Log "[TX] $message" '36'
             }
 
             Draw-Prompt
         }
 
-        # Backspace
-        elseif ($k.Key -eq 'Backspace') {
+        # BACKSPACE
+
+        elseif ($keyCode -eq 8) {
 
             if ($script:txBuffer.Length -gt 0) {
-
                 $script:txBuffer = $script:txBuffer.Substring(
-                    0,
-                    $script:txBuffer.Length - 1
+                    0, $script:txBuffer.Length - 1
                 )
-
-                Draw-Prompt
             }
+
+            Draw-Prompt
         }
 
-        # Escape clears TX
-        elseif ($k.Key -eq 'Escape') {
+        # ESCAPE
+
+        elseif ($keyCode -eq 27) {
 
             $script:txBuffer = ''
             Draw-Prompt
         }
 
-        # Character input
+        # CHARACTER INPUT
+
         elseif (
-            $k.KeyChar -ne [char]0 -and
-            -not [char]::IsControl($k.KeyChar)
+            $charCode -gt 0 -and
+            -not [char]::IsControl([char]$charCode)
         ) {
 
-            $script:txBuffer += $k.KeyChar
+            $script:txBuffer += [char]$charCode
             Draw-Prompt
         }
+
     }
     catch {
-        # Ignore console input/display errors.
+        # Ignore console input errors
     }
 
     return ''
 }
+
 
 # --------------------------------------------------
 # MAIN SERIAL MONITOR
@@ -645,11 +989,8 @@ try {
     [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
     try {
-
         $width = [Console]::WindowWidth
-
         [Console]::BufferHeight = 3000
-
         [Console]::BufferWidth = [Math]::Max(
             $width,
             [Console]::BufferWidth
@@ -660,8 +1001,7 @@ try {
     [Console]::Clear()
 
     $script:logRow = 0
-
-    Draw-Prompt
+    $script:visibleLog.Clear()
 
     # ----------------------------------------------
     # OPEN SERIAL PORT
@@ -677,12 +1017,47 @@ try {
 
     $port.DtrEnable = $true
     $port.ReadTimeout = 100
-
     $port.Open()
+
+    # ----------------------------------------------
+    # INITIALIZE DISPLAY
+    # ----------------------------------------------
+
+    Draw-Header
+    Draw-Prompt
 
     Print-Log "[CONNECTED] $portName at $baud baud" '92'
 
     $timer = [Diagnostics.Stopwatch]::StartNew()
+
+# ----------------------------------------------
+# ENABLE WINDOWS CONSOLE MOUSE EVENTS
+# ----------------------------------------------
+
+$ENABLE_MOUSE_INPUT = 0x0010
+$ENABLE_EXTENDED_FLAGS = 0x0080
+
+$newMode = (
+    $script:originalConsoleMode -bor
+    $ENABLE_MOUSE_INPUT -bor
+    $ENABLE_EXTENDED_FLAGS
+)
+
+if (-not [ConsoleMouseInput]::SetConsoleMode(
+    $script:consoleHandle,
+    [uint32]$newMode
+)) {
+    throw "Unable to enable console mouse input."
+}
+
+# Verify mouse input is enabled
+$verifyMode = [uint32]0
+
+[ConsoleMouseInput]::GetConsoleMode(
+    $script:consoleHandle,
+    [ref]$verifyMode
+) | Out-Null
+
 
     # ----------------------------------------------
     # MAIN LOOP
@@ -692,6 +1067,14 @@ try {
         -not $script:quit -and
         $port.IsOpen
     ) {
+	
+		if (
+			$script:lastWidth -ne [Console]::WindowWidth -or
+			$script:lastHeight -ne [Console]::WindowHeight -or
+			$script:lastTop -ne [Console]::WindowTop
+		) {
+			Refresh-ConsoleLayout
+		}
 
         $action = Handle-Input $port
 
@@ -716,6 +1099,9 @@ try {
                 }
                 else {
 
+                    $script:historyOffset = 0
+                    $script:historyView = $false
+
                     $port.DiscardInBuffer()
                     $buffer = ''
 
@@ -730,18 +1116,19 @@ try {
             # ======================================
 
             'R' {
-    		$script:pauseStatus = '[RESETTING ARDUINO VIA DTR...]'
-    		Draw-Prompt
 
-    		$port.DtrEnable = $false
-    		Start-Sleep -Milliseconds 100
-    		$port.DtrEnable = $true
+                $script:pauseStatus = '[RESETTING ARDUINO VIA DTR...]'
+                Draw-Prompt
 
-    		Start-Sleep -Milliseconds 100
+                $port.DtrEnable = $false
+                Start-Sleep -Milliseconds 100
+                $port.DtrEnable = $true
 
-    		$script:pauseStatus = '[ARDUINO RESET SUCCESSFUL]'
-    		Draw-Prompt
-		}
+                Start-Sleep -Milliseconds 100
+
+                $script:pauseStatus = '[ARDUINO RESET SUCCESSFUL]'
+                Draw-Prompt
+            }
 
             # ======================================
             # TIMESTAMP TOGGLE
@@ -752,11 +1139,9 @@ try {
                 $script:showTs = -not $script:showTs
 
                 if ($script:showTs) {
-
                     $script:pauseStatus = 'Timestamps ON'
                 }
                 else {
-
                     $script:pauseStatus = 'Timestamps OFF'
                 }
 
@@ -800,24 +1185,19 @@ try {
             while (($n = $buffer.IndexOf("`n")) -ge 0) {
 
                 $line = $buffer.Substring(0, $n)
-
                 $line = $line.TrimEnd("`r")
-
                 $buffer = $buffer.Substring($n + 1)
 
                 $color = '37'
 
                 if ($line -match 'SUCCESS|OK|READY|DONE') {
-
                     $color = '92'
                 }
                 elseif ($line -match 'ERROR|FAIL|FAULT|WARN|TIMEOUT') {
-
                     $color = '91'
                 }
 
                 Print-Log $line $color
-
                 $timer.Restart()
             }
 
@@ -831,9 +1211,7 @@ try {
             ) {
 
                 Print-Log $buffer '37'
-
                 $buffer = ''
-
                 $timer.Restart()
             }
         }
@@ -844,9 +1222,7 @@ try {
 catch {
 
     Write-Host "`n[POWERSHELL ERROR]" -ForegroundColor Red
-
     Write-Host $_.Exception.ToString() -ForegroundColor Red
-
     Write-Host "At: $($_.InvocationInfo.PositionMessage)" -ForegroundColor Yellow
 
     Read-Host "Press Enter to close"
@@ -854,6 +1230,18 @@ catch {
     $script:exitCode = 1
 }
 finally {
+
+    # Restore original console input mode
+    if ($null -ne $script:consoleHandle) {
+
+        try {
+            [ConsoleMouseInput]::SetConsoleMode(
+                $script:consoleHandle,
+                $script:originalConsoleMode
+            ) | Out-Null
+        }
+        catch {}
+    }
 
     if ($null -ne $port) {
 
@@ -876,4 +1264,3 @@ if ($script:quit) {
 }
 
 exit 0
-
