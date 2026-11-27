@@ -1,63 +1,104 @@
-# Arduino Auto Serial Monitor
+# Universal Serial Monitor (USM)
 
-Alternative to the Serial Monitor in the Arduino IDE.
+### A lightweight USB-to-TTL serial monitor for Windows
 
-A lightweight Windows-based Arduino Serial Monitor built using Batch scripting and PowerShell.
+A standalone serial monitoring utility built with Windows Batch and PowerShell.
 
-Designed for Arduino developers, electronics enthusiasts, and embedded systems hobbyists who want a convenient way to connect to and monitor serial devices without manually searching for COM ports.
+Designed to make connecting to, monitoring, and communicating with serial devices easier. Automatically detects connected USB-to-serial adapters, identifies likely devices, and handles COM-port selection without requiring the Arduino IDE.
+
+Whether you're working with an Arduino, ESP32, PIC, AVR, or another UART-compatible device, USM provides a simple way to access serial communication.
 
 ## Features
 
-- **Automatic COM Port Detection** – Scans connected devices and identifies likely Arduino and USB-to-TTL adapters.
-- **Device Identification** – Recognizes Arduino, CH340, CH9102, FTDI, CP210x, Prolific, and USB Serial devices.
-- **Automatic Device Selection** – Automatically selects a device when only one matching device is detected.
-- **Multiple Device Support** – Allows manual selection when multiple matching devices are connected.
-- **Custom Serial Configuration** – Configure baud rate, data bits, parity, and stop bits.
+- **Automatic COM Port Detection** – Scans available ports and identifies likely Arduino and USB-to-serial devices.
+- **Device Identification** – Recognizes common USB-to-serial chipsets and interfaces, including CH340, CH9102, FTDI, CP210x, Prolific, and USB Serial devices.
+- **Automatic Connection** – Automatically selects a matching device when only one is detected.
+- **Multiple Device Selection** – Choose which device to connect to when multiple compatible devices are present.
+- **Configurable Serial Settings** – Adjust baud rate, data bits, parity, and stop bits.
 - **Live Serial Monitoring** – Displays incoming serial data in real time.
-- **Color-Coded Output** – Highlights success messages and errors for easier debugging.
-- **Arduino Reset Control** – Reset the connected Arduino through DTR.
-- **Live Keyboard Controls** – Change settings, reset the device, or exit without restarting the script.
+- **Serial Transmission** – Send commands and data directly to the connected device.
+- **Arduino Reset Control** – Reset compatible boards through DTR.
+- **Pause and Review** – Pause live output and review previously received data.
+- **Session Logging** – Save captured serial sessions to a log file.
+- **Timestamp Control** – Toggle timestamps in the serial display.
+- **Color-Coded Interface** – Distinguishes status messages, errors, and transmitted data.
+- **Keyboard Controls** – Access common functions without restarting the monitor.
 
 ## Keyboard Controls
 
-| Key | Function |
-| :--- | :--- |
-| `Ctrl + R` | Reset Arduino via DTR |
+| Shortcut | Function |
+|---|---|
+| `Ctrl + P` | Pause serial monitoring |
+| `P` | Resume monitoring |
+| `Ctrl + R` | Reset connected device via DTR |
+| `Ctrl + T` | Toggle timestamps |
 | `Ctrl + E` | Change serial settings |
-| `Ctrl + X` | Quit serial monitor |
+| `Ctrl + X` | Exit monitor |
+| `S` | Save session log (paused menu) |
+| `M` | Open additional options (paused menu) |
+| `Enter` | Transmit entered data |
+| `Up / Down` | Navigate paused output history |
 
-## Default Settings
+## Default Serial Settings
 
-- **Baud Rate:** 9600
-- **Data Bits:** 8
-- **Parity:** None
-- **Stop Bits:** One
+| Setting | Default |
+|---|---|
+| Baud Rate | 9600 |
+| Data Bits | 8 |
+| Parity | None |
+| Stop Bits | 1 |
+
+All serial settings can be changed through the interface.
 
 ## Requirements
 
-- Windows operating system
-- PowerShell
-- Arduino or compatible USB-to-TTL serial device
-- USB cable and appropriate device drivers
+- Windows
+- Windows PowerShell
+- USB-to-serial adapter or compatible USB serial device
+- Appropriate device drivers
 
-## How to Use
+No Arduino IDE installation is required.
 
-1. Download the `.bat` file.
-2. Connect your Arduino or USB-to-TTL device.
+## Getting Started
+
+1. Download `USB-Autoconnect.bat` from this repository.
+2. Connect your Arduino, USB-to-TTL adapter, or compatible serial device.
 3. Run the batch file.
-4. Select your device if multiple compatible devices are detected.
-5. Confirm or customize serial settings.
-6. Start monitoring serial output.
+4. The utility scans available COM ports and identifies potential serial devices.
+5. Select a device if multiple matches are detected.
+6. Confirm or configure your serial settings.
+7. Start monitoring and communicating with your device.
 
 ## Compatibility
 
-Designed for Windows systems with PowerShell.
+USM is designed for Windows systems using standard serial interfaces.
 
----
+Potential compatible hardware includes:
 
-Suggestions, bug reports, and improvements are welcome!
+- Arduino boards
+- ESP32 development boards
+- AVR microcontrollers
+- PIC microcontrollers
+- STM32 development boards
+- USB-to-TTL adapters
+- Other UART-compatible serial devices
 
-## Preview
+Compatibility depends on the USB interface, device drivers, and serial implementation. Device identification does not guarantee compatibility with every microcontroller or development board.
 
-<img width="1102" height="780" alt="3170281795400036495" src="https://github.com/user-attachments/assets/f791cea0-5b87-49c2-b723-bd33797fd5ce" />
+## Project Status
 
+This project is actively evolving.
+
+It has been developed and tested against available hardware, but not every USB-to-serial adapter or microcontroller combination has been tested.
+
+Bug reports, hardware compatibility feedback, suggestions, and contributions are welcome.
+
+If you encounter an issue, please include your operating system, USB-to-serial chipset, connected hardware, and serial settings when possible.
+
+## About
+
+USM was developed as a lightweight alternative to repeatedly opening a full development environment just to access a serial connection.
+
+The goal is simple: make serial communication easier to access, configure, and use across different embedded hardware platforms.
+
+**Built for electronics enthusiasts, embedded developers, and anyone who works with serial hardware.**
