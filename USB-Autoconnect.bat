@@ -370,7 +370,7 @@ function Draw-Prompt {
                 $line3 = $script:pauseStatus
             }
             else {
-                $line2 = 'Options: P=Resume | Ctrl+R=Reset | Ctrl+T=Time | Ctrl+E=Settings | Ctrl+X=Quit | M=More | S=Save'
+                $line2 = 'Options: P=Resume | Ctrl+R=Reset | Ctrl+T=Time | Ctrl+E=Settings | Ctrl+X=Quit | S=Save | M=More'
                 $line3 = $script:pauseStatus
             }
         }
